@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>katdrop</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <canvas id="particles"></canvas>
+
+  <main class="container">
+    <header class="header">
+      <h1>katdrop</h1>
+      <p class="subtitle">// minimal file transfer</p>
+    </header>
+
+    <div class="drop-zone" id="dropZone">
+      <input type="file" id="fileInput" multiple hidden>
+      <div class="drop-actions">
+        <label for="fileInput" class="btn">choose files</label>
+        <button id="uploadBtn" class="btn btn-upload" disabled>upload</button>
+      </div>
+      <div id="fileSelection" class="file-selection"></div>
+      <div class="progress-wrap" id="progressWrap">
+        <div class="progress-bar" id="progressBar"></div>
+      </div>
+    </div>
+
+    <section class="files-section">
+      <div class="files-header">
+        <h2>available files</h2>
+        <span id="fileCount" class="file-count">0 files</span>
+      </div>
+      <ul id="fileList"></ul>
+    </section>
+  </main>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="/js/app.js"></script>
+</body>
+</html>
