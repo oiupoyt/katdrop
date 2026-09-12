@@ -1,5 +1,5 @@
-/files       https://pope-prev-fresh-manufacturer.trycloudflare.com/files 200
-/upload      https://pope-prev-fresh-manufacturer.trycloudflare.com/upload 200
-/uploads/*   https://pope-prev-fresh-manufacturer.trycloudflare.com/uploads/:splat 200
-/delete/*    https://pope-prev-fresh-manufacturer.trycloudflare.com/delete/:splat 200
+/files       https://feof-signals-fix-chevy.trycloudflare.com/files 200
+/upload      https://feof-signals-fix-chevy.trycloudflare.com/upload 200
+/uploads/*   https://feof-signals-fix-chevy.trycloudflare.com/uploads/:splat 200
+/delete/*    https://feof-signals-fix-chevy.trycloudflare.com/delete/:splat 200
 /*           /index.html 200

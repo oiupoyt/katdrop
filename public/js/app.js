@@ -18,7 +18,7 @@
   let selectedFiles = [];
 
   // API Base configuration for remote frontend (Netlify) or local hosting
-  const DEFAULT_REMOTE_API = 'https://pope-prev-fresh-manufacturer.trycloudflare.com';
+  const DEFAULT_REMOTE_API = 'https://feof-signals-fix-chevy.trycloudflare.com';
   const urlParams = new URLSearchParams(window.location.search);
   if (urlParams.has('api')) {
     const customApi = urlParams.get('api').replace(/\/+$/, '');
