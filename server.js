@@ -270,18 +270,38 @@ app.post('/upload/chunk', uploadRateLimiter, storageQuotaGuard, (req, res) => {
     return res.status(400).json({ error: 'Invalid chunk upload parameters' });
   }
 
-  const partPath = path.join(chunksDir, `${uploadId}.part`);
-  const fileStream = fs.createWriteStream(partPath, { flags: chunkIndex === 0 ? 'w' : 'a' });
+  // Write each chunk to an isolated part file to support safe, idempotent retries
+  const partPath = path.join(chunksDir, `${uploadId}_${chunkIndex}.part`);
+  const fileStream = fs.createWriteStream(partPath, { flags: 'w' });
 
   req.pipe(fileStream);
 
   fileStream.on('finish', async () => {
     if (chunkIndex === totalChunks - 1) {
-      // All chunks received! Move assembled file into uploadDir
+      // Final chunk reached - verify and assemble all parts sequentially
       try {
         const safeName = getSafeUniqueName(uploadDir, filename);
         const finalPath = path.join(uploadDir, safeName);
-        await fs.promises.rename(partPath, finalPath);
+        const finalStream = fs.createWriteStream(finalPath);
+
+        for (let i = 0; i < totalChunks; i++) {
+          const p = path.join(chunksDir, `${uploadId}_${i}.part`);
+          await new Promise((resolve, reject) => {
+            const r = fs.createReadStream(p);
+            r.on('error', reject);
+            r.on('end', () => {
+              fs.promises.unlink(p).catch(() => {});
+              resolve();
+            });
+            r.pipe(finalStream, { end: false });
+          });
+        }
+
+        finalStream.end();
+        await new Promise((resolve, reject) => {
+          finalStream.on('finish', resolve);
+          finalStream.on('error', reject);
+        });
 
         const stats = await fs.promises.stat(finalPath);
         const now = Date.now();

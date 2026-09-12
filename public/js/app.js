@@ -60,27 +60,31 @@
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   }
 
-  // Backend Status Check
+  // Backend Status Check (with resilience against momentary network congestion)
+  let consecutiveHealthFailures = 0;
   async function checkBackendStatus() {
     if (!backendStatus || !statusText) return;
-    backendStatus.className = 'backend-status checking';
-    statusText.textContent = 'checking...';
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
       const res = await apiFetch(`${API_BASE}/health`, { signal: controller.signal });
       clearTimeout(timeoutId);
 
       if (res.ok) {
+        consecutiveHealthFailures = 0;
         backendStatus.className = 'backend-status online';
         statusText.textContent = 'online';
       } else {
         throw new Error('Non-200');
       }
     } catch (err) {
-      backendStatus.className = 'backend-status offline';
-      statusText.textContent = 'offline';
+      consecutiveHealthFailures++;
+      // Require at least 2 consecutive failures so high-traffic uploads don't trigger false offline badges
+      if (consecutiveHealthFailures >= 2) {
+        backendStatus.className = 'backend-status offline';
+        statusText.textContent = 'offline';
+      }
     }
   }
 
@@ -389,8 +393,8 @@
     }
   }
 
-  // 16MB Chunk Size (safely bypasses Cloudflare 100MB body limit & connection timeouts on Wi-Fi)
-  const CHUNK_SIZE = 16 * 1024 * 1024;
+  // 8MB Chunk Size (optimal for mobile Wi-Fi, low latency, avoids proxy timeouts)
+  const CHUNK_SIZE = 8 * 1024 * 1024;
 
   async function uploadSingleFile(file, overallIndex, totalFiles) {
     const fileLabel = totalFiles > 1 ? `[${overallIndex + 1}/${totalFiles}] ` : '';
@@ -430,7 +434,7 @@
         xhr.send(formData);
       });
     } else {
-      // Chunked slice upload for files > 75MB (200MB, 500MB, 1GB+)
+      // Chunked slice upload for files > 8MB (200MB, 500MB, 1GB+)
       const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
       const uploadId = 'up_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8);
       let uploadedBytes = 0;
@@ -439,40 +443,62 @@
         const start = i * CHUNK_SIZE;
         const end = Math.min(file.size, start + CHUNK_SIZE);
         const chunk = file.slice(start, end);
+        const url = `${API_BASE}/upload/chunk?uploadId=${encodeURIComponent(uploadId)}&chunkIndex=${i}&totalChunks=${totalChunks}&filename=${encodeURIComponent(file.name)}&totalSize=${file.size}`;
 
-        await new Promise((resolve, reject) => {
-          const xhr = new XMLHttpRequest();
-          xhr.upload.addEventListener('progress', e => {
-            if (e.lengthComputable) {
-              const currentTotal = uploadedBytes + e.loaded;
-              const pct = Math.min(99, Math.round((currentTotal / file.size) * 100));
-              progressBar.style.width = `${pct}%`;
-              if (progressText) {
-                progressText.textContent = `${fileLabel}uploading: ${pct}% (${formatBytes(currentTotal)} / ${formatBytes(file.size)})`;
-              }
+        let attempt = 0;
+        const maxRetries = 4;
+        let chunkSuccess = false;
+
+        while (attempt < maxRetries && !chunkSuccess) {
+          try {
+            await new Promise((resolve, reject) => {
+              const xhr = new XMLHttpRequest();
+              xhr.timeout = 60000; // 60s timeout per 8MB chunk
+
+              xhr.upload.addEventListener('progress', e => {
+                if (e.lengthComputable) {
+                  const currentTotal = uploadedBytes + e.loaded;
+                  const pct = Math.min(99, Math.round((currentTotal / file.size) * 100));
+                  progressBar.style.width = `${pct}%`;
+                  if (progressText) {
+                    progressText.textContent = `${fileLabel}uploading: ${pct}% (${formatBytes(currentTotal)} / ${formatBytes(file.size)})`;
+                  }
+                }
+              });
+
+              xhr.onload = () => {
+                if (xhr.status >= 200 && xhr.status < 300) {
+                  uploadedBytes += (end - start);
+                  chunkSuccess = true;
+                  resolve();
+                } else {
+                  let msg = 'chunk upload failed';
+                  try {
+                    const res = JSON.parse(xhr.responseText);
+                    if (res && res.error) msg = res.error;
+                  } catch {}
+                  reject(new Error(msg));
+                }
+              };
+
+              xhr.onerror = () => reject(new Error('connection drop'));
+              xhr.ontimeout = () => reject(new Error('timeout'));
+
+              xhr.open('POST', url);
+              xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+              xhr.send(chunk);
+            });
+          } catch (err) {
+            attempt++;
+            if (attempt >= maxRetries) {
+              throw new Error(`Upload interrupted on chunk ${i + 1}/${totalChunks}. Check connection.`);
             }
-          });
-
-          xhr.onload = () => {
-            if (xhr.status >= 200 && xhr.status < 300) {
-              uploadedBytes += (end - start);
-              resolve();
-            } else {
-              let msg = 'chunk upload failed';
-              try {
-                const res = JSON.parse(xhr.responseText);
-                if (res && res.error) msg = res.error;
-              } catch {}
-              reject(new Error(msg));
+            if (progressText) {
+              progressText.textContent = `${fileLabel}reconnecting chunk ${i + 1}... (retry ${attempt}/${maxRetries})`;
             }
-          };
-
-          xhr.onerror = () => reject(new Error('chunk upload connection failed'));
-          const url = `${API_BASE}/upload/chunk?uploadId=${encodeURIComponent(uploadId)}&chunkIndex=${i}&totalChunks=${totalChunks}&filename=${encodeURIComponent(file.name)}&totalSize=${file.size}`;
-          xhr.open('POST', url);
-          xhr.setRequestHeader('Content-Type', 'application/octet-stream');
-          xhr.send(chunk);
-        });
+            await new Promise(r => setTimeout(r, attempt * 1200));
+          }
+        }
       }
     }
   }
