@@ -2,7 +2,7 @@
 
 a minimal, smooth file transfer service with 10-minute auto-deletion.
 
-🌐 **Website**: [katdrop.oiupoyt.space](https://katdrop.oiupoyt.space)
+↗ [katdrop.oiupoyt.space](https://katdrop.oiupoyt.space)
 
 > **Backend API**: The official backend is powered by a permanent Cloudflare Tunnel at `https://katdrop-api.oiupoyt.space`.
 
