@@ -17,6 +17,14 @@
 
   let selectedFiles = [];
 
+  // API Base configuration for remote frontend (Netlify) or local hosting
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.has('api')) {
+    const customApi = urlParams.get('api').replace(/\/+$/, '');
+    localStorage.setItem('katdrop_api', customApi);
+  }
+  const API_BASE = window.KATDROP_API || localStorage.getItem('katdrop_api') || '';
+
   // Toast
   let toastTimeout;
   function showToast(msg) {
@@ -221,7 +229,7 @@
   // Fetch and display files
   async function fetchFiles() {
     try {
-      const res = await fetch('/files');
+      const res = await fetch(`${API_BASE}/files`);
       const files = await res.json();
       fileList.innerHTML = '';
 
@@ -252,7 +260,7 @@
             </div>
           </div>
           <div class="file-actions">
-            <a href="/uploads/${encodeURIComponent(name)}" class="action-btn action-download" download>download</a>
+            <a href="${API_BASE}/uploads/${encodeURIComponent(name)}" class="action-btn action-download" download>download</a>
             <button class="action-btn action-delete" onclick="deleteFile('${escapeHtml(name)}', this.closest('li'))">delete</button>
           </div>
         `;
@@ -271,7 +279,7 @@
     if (cardElement) cardElement.classList.add('deleting');
 
     try {
-      const res = await fetch(`/delete/${encodeURIComponent(filename)}`, { method: 'DELETE' });
+      const res = await fetch(`${API_BASE}/delete/${encodeURIComponent(filename)}`, { method: 'DELETE' });
       if (res.ok) {
         showToast('file deleted');
         setTimeout(() => {
@@ -343,7 +351,7 @@
       showToast('upload failed');
     };
 
-    xhr.open('POST', '/upload');
+    xhr.open('POST', `${API_BASE}/upload`);
     xhr.send(formData);
   }
 

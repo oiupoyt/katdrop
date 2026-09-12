@@ -1,0 +1,10 @@
+# Netlify redirects file
+# To proxy API requests through Netlify (bypassing mixed content & CORS),
+# replace YOUR_BACKEND_URL with your Termux backend URL (e.g., Cloudflare Tunnel / ngrok URL):
+# /files https://YOUR_BACKEND_URL/files 200
+# /upload https://YOUR_BACKEND_URL/upload 200
+# /uploads/* https://YOUR_BACKEND_URL/uploads/:splat 200
+# /delete/* https://YOUR_BACKEND_URL/delete/:splat 200
+
+# SPA fallback rule
+/* /index.html 200
