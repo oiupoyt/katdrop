@@ -95,7 +95,7 @@ const upload = multer({
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, x-katdrop-key');
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
   }
@@ -103,6 +103,19 @@ app.use((req, res, next) => {
 });
 app.use(express.json());
 app.use(express.static(publicDir));
+
+// Optional API Key Protection (if KATDROP_KEY environment variable is set)
+const REQUIRED_API_KEY = process.env.KATDROP_KEY || '';
+if (REQUIRED_API_KEY) {
+  app.use((req, res, next) => {
+    if (req.method === 'OPTIONS' || req.path === '/health' || req.path === '/') return next();
+    const clientKey = req.headers['x-katdrop-key'] || req.query.key;
+    if (clientKey !== REQUIRED_API_KEY) {
+      return res.status(401).json({ error: 'Unauthorized: Invalid or missing API key' });
+    }
+    next();
+  });
+}
 
 // Health check endpoint
 app.get('/health', (req, res) => {
