@@ -21,7 +21,7 @@
   let selectedFiles = [];
 
   // API Configuration (configurable via URL param ?api=... or localStorage)
-  const DEFAULT_REMOTE_API = 'https://lucia-hang-jackson-suggests.trycloudflare.com';
+  const DEFAULT_REMOTE_API = 'https://katdrop-api.oiupoyt.space';
   const urlParams = new URLSearchParams(window.location.search);
   if (urlParams.has('api')) {
     const customApi = urlParams.get('api').replace(/\/+$/, '');

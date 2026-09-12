@@ -2,7 +2,7 @@
 
 a minimal, smooth file transfer service with 10-minute auto-deletion.
 
-> **Note**: This repository uses a placeholder backend URL (`https://YOUR_BACKEND_URL.trycloudflare.com`) so no private endpoints are exposed publicly.
+> **Backend API**: The official backend is powered by a permanent Cloudflare Tunnel at `https://katdrop-api.oiupoyt.space`.
 
 ## features
 
