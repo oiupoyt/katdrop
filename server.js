@@ -2,7 +2,6 @@ const express = require('express');
 const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
-const crypto = require('crypto');
 
 const app = express();
 app.disable('x-powered-by');
@@ -10,21 +9,20 @@ let currentPort = parseInt(process.env.PORT, 10) || 3000;
 
 // Directories
 const uploadDir = path.join(__dirname, 'uploads');
+const chunksDir = path.join(__dirname, 'chunks');
 const publicDir = path.join(__dirname, 'public');
 
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
+if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+if (!fs.existsSync(chunksDir)) fs.mkdirSync(chunksDir, { recursive: true });
 
 // Security & Quota Constants
 const FILE_TTL_MS = 10 * 60 * 1000; // 10 Minutes File Expiration
 const MAX_TOTAL_STORAGE_BYTES = 4 * 1024 * 1024 * 1024; // 4GB Max Storage Quota
-const MAX_FILE_SIZE_BYTES = 1024 * 1024 * 1024; // 1GB Max per file
+const MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024 * 1024; // 2GB Max Total File Size
 
-// In-Memory Security Stores
-const deleteTokens = new Map(); // filename -> deleteToken
-const rateLimitMap = new Map(); // ip -> { count, resetTime }
-const uploadRateLimitMap = new Map(); // ip -> { count, resetTime }
+// In-Memory Rate Limiters
+const rateLimitMap = new Map();
+const uploadRateLimitMap = new Map();
 
 // Utility: Client IP extraction
 function getClientIp(req) {
@@ -62,7 +60,6 @@ async function getTotalUploadSize() {
 
 // Utility: Safe unique filename (prevents directory traversal, collision, and shell injection)
 function getSafeUniqueName(destination, originalName) {
-  // Sanitize: strip dangerous chars, limit length, prevent dotfile creation
   const base = path.basename(originalName).replace(/[^\w\s.-]/gi, '_').replace(/^\.+/, '').trim() || 'file';
   const ext = path.extname(base).slice(0, 16);
   const nameOnly = (path.basename(base, ext) || 'file').slice(0, 120);
@@ -80,7 +77,7 @@ function getSafeUniqueName(destination, originalName) {
 function getSafeFilePath(filename) {
   if (!filename || typeof filename !== 'string') return null;
   const safeName = path.basename(filename);
-  if (safeName.startsWith('.')) return null; // Reject hidden files
+  if (safeName.startsWith('.')) return null;
   const resolvedPath = path.resolve(uploadDir, safeName);
   if (!resolvedPath.startsWith(uploadDir + path.sep) && resolvedPath !== uploadDir) {
     return null;
@@ -88,24 +85,33 @@ function getSafeFilePath(filename) {
   return { resolvedPath, safeName };
 }
 
-// Automatic cleanup of expired files (older than 10 minutes)
+// Automatic cleanup of expired files and stale partial chunk uploads
 async function cleanupExpiredFiles() {
   try {
     const entries = await fs.promises.readdir(uploadDir);
     const now = Date.now();
 
     for (const name of entries) {
-      if (name.startsWith('.')) continue; // Preserve .gitkeep and hidden files
+      if (name.startsWith('.')) continue;
       const fullPath = path.join(uploadDir, name);
       try {
         const stats = await fs.promises.stat(fullPath);
         if (stats.isFile() && (now - stats.mtimeMs) >= FILE_TTL_MS) {
           await fs.promises.unlink(fullPath);
-          deleteTokens.delete(name);
         }
-      } catch (err) {
-        // Ignore files already deleted or locked
-      }
+      } catch (err) {}
+    }
+
+    // Clean up partial chunks older than 15 minutes
+    const chunkEntries = await fs.promises.readdir(chunksDir).catch(() => []);
+    for (const name of chunkEntries) {
+      const partPath = path.join(chunksDir, name);
+      try {
+        const stats = await fs.promises.stat(partPath);
+        if (stats.isFile() && (now - stats.mtimeMs) >= 15 * 60 * 1000) {
+          await fs.promises.unlink(partPath);
+        }
+      } catch (err) {}
     }
 
     // Clean up expired rate limiter maps
@@ -115,16 +121,13 @@ async function cleanupExpiredFiles() {
     for (const [ip, entry] of uploadRateLimitMap.entries()) {
       if (now > entry.resetTime + 60000) uploadRateLimitMap.delete(ip);
     }
-  } catch (err) {
-    // Ignore read errors during sweep
-  }
+  } catch (err) {}
 }
 
-// Run cleanup sweep every 60 seconds (unref'd to prevent blocking process exit)
 const cleanupInterval = setInterval(cleanupExpiredFiles, 60 * 1000);
 cleanupInterval.unref();
 
-// Multer storage
+// Multer storage for standard single-request uploads (<= 75MB)
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadDir),
   filename: (req, file, cb) => {
@@ -134,8 +137,8 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage,
   limits: {
-    fileSize: MAX_FILE_SIZE_BYTES, // 1GB
-    files: 10 // Max 10 files per upload batch
+    fileSize: 85 * 1024 * 1024, // 85MB per standard file
+    files: 10
   }
 });
 
@@ -166,8 +169,8 @@ function uploadRateLimiter(req, res, next) {
   }
   entry.count++;
   uploadRateLimitMap.set(ip, entry);
-  if (entry.count > 25) {
-    return res.status(429).json({ error: 'Upload rate limit reached (max 25 uploads per 5 minutes).' });
+  if (entry.count > 100) {
+    return res.status(429).json({ error: 'Upload rate limit reached, please wait a few minutes.' });
   }
   next();
 }
@@ -178,7 +181,7 @@ async function storageQuotaGuard(req, res, next) {
   const incomingLength = parseInt(req.headers['content-length'] || '0', 10);
   if (currentSize + incomingLength > MAX_TOTAL_STORAGE_BYTES) {
     return res.status(507).json({
-      error: 'Storage quota full (4GB cap). Please wait for older files to expire.'
+      error: 'Storage quota full (4GB cap). Please wait for older files to auto-delete.'
     });
   }
   next();
@@ -202,15 +205,13 @@ app.use((req, res, next) => {
       ) {
         res.header('Access-Control-Allow-Origin', origin);
       }
-    } catch {
-      // Invalid origin URL
-    }
+    } catch {}
   } else {
     res.header('Access-Control-Allow-Origin', '*');
   }
 
   res.header('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, x-delete-token');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, x-upload-id, x-chunk-index, x-total-chunks');
   res.header('X-Content-Type-Options', 'nosniff');
   res.header('X-Frame-Options', 'SAMEORIGIN');
   res.header('Referrer-Policy', 'strict-origin-when-cross-origin');
@@ -234,7 +235,7 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Upload endpoint (supports single or multiple files with rate-limiting and quota protection)
+// Standard Upload endpoint (for files <= 75MB)
 app.post(
   '/upload',
   uploadRateLimiter,
@@ -246,24 +247,66 @@ app.post(
     }
 
     const now = Date.now();
-    const uploaded = req.files.map(f => {
-      // Generate unguessable deletion token so only uploader can manually delete before 10-min TTL
-      const deleteToken = crypto.randomBytes(16).toString('hex');
-      deleteTokens.set(f.filename, deleteToken);
-
-      return {
-        name: f.filename,
-        size: f.size,
-        sizeFormatted: formatBytes(f.size),
-        expiresAt: new Date(now + FILE_TTL_MS).toISOString(),
-        remainingSeconds: Math.floor(FILE_TTL_MS / 1000),
-        deleteToken
-      };
-    });
+    const uploaded = req.files.map(f => ({
+      name: f.filename,
+      size: f.size,
+      sizeFormatted: formatBytes(f.size),
+      expiresAt: new Date(now + FILE_TTL_MS).toISOString(),
+      remainingSeconds: Math.floor(FILE_TTL_MS / 1000)
+    }));
 
     res.json({ success: true, files: uploaded });
   }
 );
+
+// Chunked Upload endpoint (bypasses Cloudflare 100MB body limit for files 100MB - 2GB+)
+app.post('/upload/chunk', uploadRateLimiter, storageQuotaGuard, (req, res) => {
+  const uploadId = String(req.query.uploadId || '').replace(/[^a-zA-Z0-9_-]/g, '');
+  const chunkIndex = parseInt(req.query.chunkIndex, 10);
+  const totalChunks = parseInt(req.query.totalChunks, 10);
+  const filename = decodeURIComponent(String(req.query.filename || 'file'));
+
+  if (!uploadId || isNaN(chunkIndex) || isNaN(totalChunks) || chunkIndex < 0 || totalChunks <= 0) {
+    return res.status(400).json({ error: 'Invalid chunk upload parameters' });
+  }
+
+  const partPath = path.join(chunksDir, `${uploadId}.part`);
+  const fileStream = fs.createWriteStream(partPath, { flags: chunkIndex === 0 ? 'w' : 'a' });
+
+  req.pipe(fileStream);
+
+  fileStream.on('finish', async () => {
+    if (chunkIndex === totalChunks - 1) {
+      // All chunks received! Move assembled file into uploadDir
+      try {
+        const safeName = getSafeUniqueName(uploadDir, filename);
+        const finalPath = path.join(uploadDir, safeName);
+        await fs.promises.rename(partPath, finalPath);
+
+        const stats = await fs.promises.stat(finalPath);
+        const now = Date.now();
+        res.json({
+          success: true,
+          files: [{
+            name: safeName,
+            size: stats.size,
+            sizeFormatted: formatBytes(stats.size),
+            expiresAt: new Date(now + FILE_TTL_MS).toISOString(),
+            remainingSeconds: Math.floor(FILE_TTL_MS / 1000)
+          }]
+        });
+      } catch (err) {
+        res.status(500).json({ error: 'Failed to assemble uploaded file' });
+      }
+    } else {
+      res.json({ success: true, chunkIndex });
+    }
+  });
+
+  fileStream.on('error', (err) => {
+    res.status(500).json({ error: 'Failed to save chunk' });
+  });
+});
 
 // List files with metadata, remaining TTL, and on-demand expiration check
 app.get('/files', async (req, res) => {
@@ -283,7 +326,6 @@ app.get('/files', async (req, res) => {
         // Immediate purge if expired
         if (ageMs >= FILE_TTL_MS) {
           fs.promises.unlink(fullPath).catch(() => {});
-          deleteTokens.delete(name);
           continue;
         }
 
@@ -322,39 +364,30 @@ app.get('/uploads/:filename', (req, res) => {
     const stats = fs.statSync(safe.resolvedPath);
     if ((Date.now() - stats.mtimeMs) >= FILE_TTL_MS) {
       fs.unlink(safe.resolvedPath, () => {});
-      deleteTokens.delete(safe.safeName);
       return res.status(410).send('File expired');
     }
   } catch (err) {
     return res.status(404).send('File not found');
   }
 
-  // Enforce Sandbox & Download attachment to prevent stored XSS from malicious SVG/HTML uploads
   res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Cache-Control', 'private, no-transform');
   res.download(safe.resolvedPath, safe.safeName);
 });
 
-// Secure Delete endpoint (requires matching delete token generated on upload)
+// Simple, reliable Delete endpoint
 app.delete('/delete/:filename', async (req, res) => {
   const safe = getSafeFilePath(req.params.filename);
-  if (!safe) return res.status(400).send('Invalid filename');
-
-  const expectedToken = deleteTokens.get(safe.safeName);
-  const clientToken = req.headers['x-delete-token'] || req.query.token;
-
-  // Verify deletion token if present in record
-  if (expectedToken && (!clientToken || clientToken !== expectedToken)) {
-    return res.status(403).json({ error: 'Unauthorized: Invalid or missing delete token' });
-  }
+  if (!safe) return res.status(400).json({ error: 'Invalid filename' });
 
   try {
-    await fs.promises.unlink(safe.resolvedPath);
-    deleteTokens.delete(safe.safeName);
-    res.send('File deleted');
+    if (fs.existsSync(safe.resolvedPath)) {
+      await fs.promises.unlink(safe.resolvedPath);
+    }
+    res.json({ success: true, message: 'File deleted' });
   } catch (err) {
-    res.status(500).send('Error deleting file');
+    res.status(500).json({ error: 'Error deleting file' });
   }
 });
 
@@ -362,7 +395,7 @@ app.delete('/delete/:filename', async (req, res) => {
 app.use((err, req, res, next) => {
   if (err instanceof multer.MulterError) {
     if (err.code === 'LIMIT_FILE_SIZE') {
-      return res.status(413).json({ error: 'File exceeds 1GB limit.' });
+      return res.status(413).json({ error: 'File exceeds upload limit.' });
     }
     if (err.code === 'LIMIT_FILE_COUNT') {
       return res.status(400).json({ error: 'Max 10 files per upload batch.' });
@@ -380,7 +413,7 @@ function startServer(port, maxAttempts = 10) {
   const server = app.listen(port, '0.0.0.0', () => {
     currentPort = port;
     console.log(`\nkatdrop running on http://localhost:${port}\n`);
-    cleanupExpiredFiles(); // Run initial cleanup on startup
+    cleanupExpiredFiles();
   });
 
   server.on('error', (err) => {

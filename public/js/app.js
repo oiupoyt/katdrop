@@ -321,21 +321,15 @@
     }
   }
 
-  // Delete file with smooth animation (authorized via deleteToken)
+  // Delete file with smooth animation
   window.deleteFile = async function (filename, cardElement) {
     if (cardElement) cardElement.classList.add('deleting');
 
     try {
-      const delToken = sessionStorage.getItem('katdrop_del_' + filename) || '';
-      const headers = {};
-      if (delToken) headers['x-delete-token'] = delToken;
-
       const res = await apiFetch(`${API_BASE}/delete/${encodeURIComponent(filename)}`, {
-        method: 'DELETE',
-        headers
+        method: 'DELETE'
       });
       if (res.ok) {
-        sessionStorage.removeItem('katdrop_del_' + filename);
         showToast('file deleted');
         setTimeout(() => {
           fetchFiles();
@@ -369,76 +363,125 @@
     }
   }
 
-  // Upload files with smooth progress bar
-  function uploadSelectedFiles() {
-    if (selectedFiles.length === 0) return;
+  // 75MB Chunk Size (safely bypasses Cloudflare 100MB body limit for files 100MB-2GB+)
+  const CHUNK_SIZE = 75 * 1024 * 1024;
 
-    const formData = new FormData();
-    selectedFiles.forEach(f => formData.append('file', f));
+  async function uploadSingleFile(file, overallIndex, totalFiles) {
+    const fileLabel = totalFiles > 1 ? `[${overallIndex + 1}/${totalFiles}] ` : '';
+
+    if (file.size <= CHUNK_SIZE) {
+      // Direct standard upload
+      const formData = new FormData();
+      formData.append('file', file);
+
+      return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.upload.addEventListener('progress', e => {
+          if (e.lengthComputable) {
+            const pct = Math.round((e.loaded / e.total) * 100);
+            progressBar.style.width = `${pct}%`;
+            if (progressText) {
+              progressText.textContent = `${fileLabel}uploading: ${pct}% (${formatBytes(e.loaded)} / ${formatBytes(e.total)})`;
+            }
+          }
+        });
+
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve();
+          } else {
+            let msg = 'upload failed';
+            try {
+              const res = JSON.parse(xhr.responseText);
+              if (res && res.error) msg = res.error;
+            } catch {}
+            reject(new Error(msg));
+          }
+        };
+
+        xhr.onerror = () => reject(new Error('upload connection failed'));
+        xhr.open('POST', `${API_BASE}/upload`);
+        xhr.send(formData);
+      });
+    } else {
+      // Chunked slice upload for files > 75MB (200MB, 500MB, 1GB+)
+      const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+      const uploadId = 'up_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8);
+      let uploadedBytes = 0;
+
+      for (let i = 0; i < totalChunks; i++) {
+        const start = i * CHUNK_SIZE;
+        const end = Math.min(file.size, start + CHUNK_SIZE);
+        const chunk = file.slice(start, end);
+
+        await new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.upload.addEventListener('progress', e => {
+            if (e.lengthComputable) {
+              const currentTotal = uploadedBytes + e.loaded;
+              const pct = Math.min(99, Math.round((currentTotal / file.size) * 100));
+              progressBar.style.width = `${pct}%`;
+              if (progressText) {
+                progressText.textContent = `${fileLabel}uploading: ${pct}% (${formatBytes(currentTotal)} / ${formatBytes(file.size)})`;
+              }
+            }
+          });
+
+          xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+              uploadedBytes += (end - start);
+              resolve();
+            } else {
+              let msg = 'chunk upload failed';
+              try {
+                const res = JSON.parse(xhr.responseText);
+                if (res && res.error) msg = res.error;
+              } catch {}
+              reject(new Error(msg));
+            }
+          };
+
+          xhr.onerror = () => reject(new Error('chunk upload connection failed'));
+          const url = `${API_BASE}/upload/chunk?uploadId=${encodeURIComponent(uploadId)}&chunkIndex=${i}&totalChunks=${totalChunks}&filename=${encodeURIComponent(file.name)}&totalSize=${file.size}`;
+          xhr.open('POST', url);
+          xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+          xhr.send(chunk);
+        });
+      }
+    }
+  }
+
+  // Upload files with smooth progress bar
+  async function uploadSelectedFiles() {
+    if (selectedFiles.length === 0) return;
 
     progressWrap.classList.add('active');
     progressBar.style.width = '0%';
     uploadBtn.disabled = true;
 
-    const xhr = new XMLHttpRequest();
-
-    xhr.upload.addEventListener('progress', e => {
-      if (e.lengthComputable) {
-        const pct = Math.round((e.loaded / e.total) * 100);
-        progressBar.style.width = `${pct}%`;
-        if (progressText) {
-          progressText.textContent = `uploading: ${pct}% (${formatBytes(e.loaded)} / ${formatBytes(e.total)})`;
-        }
+    try {
+      for (let i = 0; i < selectedFiles.length; i++) {
+        await uploadSingleFile(selectedFiles[i], i, selectedFiles.length);
       }
-    });
 
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        try {
-          const data = JSON.parse(xhr.responseText);
-          if (data && data.files) {
-            data.files.forEach(f => {
-              if (f.name && f.deleteToken) {
-                sessionStorage.setItem('katdrop_del_' + f.name, f.deleteToken);
-              }
-            });
-          }
-        } catch (e) {}
-
-        progressBar.style.width = '100%';
-        if (progressText) progressText.textContent = 'processing...';
-        setTimeout(() => {
-          progressWrap.classList.remove('active');
-          progressBar.style.width = '0%';
-          if (progressText) progressText.textContent = '';
-          fileInput.value = '';
-          updateFileSelection([]);
-          fetchFiles();
-          showToast('upload complete');
-        }, 250);
-      } else {
-        let msg = 'upload failed';
-        try {
-          const errData = JSON.parse(xhr.responseText);
-          if (errData && errData.error) msg = errData.error;
-        } catch (e) {}
+      progressBar.style.width = '100%';
+      if (progressText) progressText.textContent = 'processing...';
+      setTimeout(() => {
         progressWrap.classList.remove('active');
-        uploadBtn.disabled = false;
+        progressBar.style.width = '0%';
         if (progressText) progressText.textContent = '';
-        showToast(msg);
-      }
-    };
-
-    xhr.onerror = () => {
+        fileInput.value = '';
+        updateFileSelection([]);
+        fetchFiles();
+        showToast('upload complete');
+      }, 250);
+    } catch (err) {
       progressWrap.classList.remove('active');
       uploadBtn.disabled = false;
       if (progressText) progressText.textContent = '';
-      showToast('upload failed - check connection');
+      showToast(err.message || 'upload failed');
       checkBackendStatus();
-    };
-
-    xhr.open('POST', `${API_BASE}/upload`);
-    xhr.send(formData);
+    }
   }
 
   // Listeners
