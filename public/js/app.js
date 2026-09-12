@@ -20,8 +20,13 @@
 
   let selectedFiles = [];
 
-  // API Configuration (configurable via URL param ?api=... or localStorage)
+  // API Configuration (permanent default backend)
   const DEFAULT_REMOTE_API = 'https://katdrop-api.oiupoyt.space';
+  // Purge any legacy ephemeral trycloudflare or placeholder URLs from localStorage
+  const savedApi = localStorage.getItem('katdrop_api');
+  if (savedApi && (savedApi.includes('trycloudflare.com') || savedApi.includes('YOUR_BACKEND_URL'))) {
+    localStorage.removeItem('katdrop_api');
+  }
   const urlParams = new URLSearchParams(window.location.search);
   if (urlParams.has('api')) {
     const customApi = urlParams.get('api').replace(/\/+$/, '');
@@ -316,20 +321,29 @@
     }
   }
 
-  // Delete file with smooth animation
+  // Delete file with smooth animation (authorized via deleteToken)
   window.deleteFile = async function (filename, cardElement) {
     if (cardElement) cardElement.classList.add('deleting');
 
     try {
-      const res = await apiFetch(`${API_BASE}/delete/${encodeURIComponent(filename)}`, { method: 'DELETE' });
+      const delToken = sessionStorage.getItem('katdrop_del_' + filename) || '';
+      const headers = {};
+      if (delToken) headers['x-delete-token'] = delToken;
+
+      const res = await apiFetch(`${API_BASE}/delete/${encodeURIComponent(filename)}`, {
+        method: 'DELETE',
+        headers
+      });
       if (res.ok) {
+        sessionStorage.removeItem('katdrop_del_' + filename);
         showToast('file deleted');
         setTimeout(() => {
           fetchFiles();
         }, 180);
       } else {
         if (cardElement) cardElement.classList.remove('deleting');
-        showToast('failed to delete');
+        const err = await res.json().catch(() => null);
+        showToast(err && err.error ? err.error : 'failed to delete');
       }
     } catch (err) {
       if (cardElement) cardElement.classList.remove('deleting');
@@ -379,17 +393,40 @@
     });
 
     xhr.onload = () => {
-      progressBar.style.width = '100%';
-      if (progressText) progressText.textContent = 'processing...';
-      setTimeout(() => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const data = JSON.parse(xhr.responseText);
+          if (data && data.files) {
+            data.files.forEach(f => {
+              if (f.name && f.deleteToken) {
+                sessionStorage.setItem('katdrop_del_' + f.name, f.deleteToken);
+              }
+            });
+          }
+        } catch (e) {}
+
+        progressBar.style.width = '100%';
+        if (progressText) progressText.textContent = 'processing...';
+        setTimeout(() => {
+          progressWrap.classList.remove('active');
+          progressBar.style.width = '0%';
+          if (progressText) progressText.textContent = '';
+          fileInput.value = '';
+          updateFileSelection([]);
+          fetchFiles();
+          showToast('upload complete');
+        }, 250);
+      } else {
+        let msg = 'upload failed';
+        try {
+          const errData = JSON.parse(xhr.responseText);
+          if (errData && errData.error) msg = errData.error;
+        } catch (e) {}
         progressWrap.classList.remove('active');
-        progressBar.style.width = '0%';
+        uploadBtn.disabled = false;
         if (progressText) progressText.textContent = '';
-        fileInput.value = '';
-        updateFileSelection([]);
-        fetchFiles();
-        showToast('upload complete');
-      }, 250);
+        showToast(msg);
+      }
     };
 
     xhr.onerror = () => {
