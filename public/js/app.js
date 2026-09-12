@@ -20,26 +20,19 @@
 
   let selectedFiles = [];
 
-  // API & Key Configuration (configurable via URL param ?api=...&key=... or localStorage)
-  const DEFAULT_REMOTE_API = 'https://feof-signals-fix-chevy.trycloudflare.com';
+  // API Configuration (configurable via URL param ?api=... or localStorage)
+  // Public repo uses placeholder values for security
+  const DEFAULT_REMOTE_API = 'https://YOUR_BACKEND_URL.trycloudflare.com';
   const urlParams = new URLSearchParams(window.location.search);
   if (urlParams.has('api')) {
     const customApi = urlParams.get('api').replace(/\/+$/, '');
     localStorage.setItem('katdrop_api', customApi);
   }
-  if (urlParams.has('key')) {
-    localStorage.setItem('katdrop_key', urlParams.get('key'));
-  }
   const isLocalOrigin = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname.startsWith('192.168.');
   const API_BASE = window.KATDROP_API || localStorage.getItem('katdrop_api') || (isLocalOrigin ? '' : DEFAULT_REMOTE_API);
-  const API_KEY = window.KATDROP_KEY || localStorage.getItem('katdrop_key') || 'YOUR_API_KEY_HERE';
 
-  // Authenticated fetch helper
+  // Fetch helper
   function apiFetch(url, options = {}) {
-    options.headers = options.headers || {};
-    if (API_KEY && API_KEY !== 'YOUR_API_KEY_HERE') {
-      options.headers['x-katdrop-key'] = API_KEY;
-    }
     return fetch(url, options);
   }
 
@@ -301,8 +294,6 @@
         const size = typeof file === 'object' && file.sizeFormatted ? file.sizeFormatted : '';
         const expiresMs = file.expiresAt ? new Date(file.expiresAt).getTime() : (Date.now() + 600000);
         const remainingSec = Math.max(0, Math.ceil((expiresMs - Date.now()) / 1000));
-        const keyParam = (API_KEY && API_KEY !== 'YOUR_API_KEY_HERE') ? `?key=${encodeURIComponent(API_KEY)}` : '';
-
         li.innerHTML = `
           <div class="file-info">
             <span class="file-name" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
@@ -312,7 +303,7 @@
             </div>
           </div>
           <div class="file-actions">
-            <a href="${API_BASE}/uploads/${encodeURIComponent(name)}${keyParam}" class="action-btn action-download" download>download</a>
+            <a href="${API_BASE}/uploads/${encodeURIComponent(name)}" class="action-btn action-download" download>download</a>
             <button class="action-btn action-delete" onclick="deleteFile('${escapeHtml(name)}', this.closest('li'))">delete</button>
           </div>
         `;
@@ -411,9 +402,6 @@
     };
 
     xhr.open('POST', `${API_BASE}/upload`);
-    if (API_KEY && API_KEY !== 'YOUR_API_KEY_HERE') {
-      xhr.setRequestHeader('x-katdrop-key', API_KEY);
-    }
     xhr.send(formData);
   }
 

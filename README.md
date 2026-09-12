@@ -2,7 +2,7 @@
 
 a minimal, smooth file transfer service with 10-minute auto-deletion.
 
-> **Note**: This repository uses a placeholder backend URL (`https://YOUR_BACKEND_URL.trycloudflare.com`) and placeholder API key (`YOUR_API_KEY_HERE`) so no private endpoints or keys are exposed publicly.
+> **Note**: This repository uses a placeholder backend URL (`https://YOUR_BACKEND_URL.trycloudflare.com`) so no private endpoints are exposed publicly.
 
 ## features
 
@@ -12,30 +12,19 @@ a minimal, smooth file transfer service with 10-minute auto-deletion.
 - drag & drop files anywhere to upload instantly
 - 10-minute auto-deletion timer per file with live countdown
 - safe path verification and collision-free file naming
-- optional API key authorization (`x-katdrop-key`)
 - zero external CDN dependencies (works completely offline)
 
 ## configuration
 
 ### connecting your frontend to your backend
 
-To connect your deployed frontend to your private backend (e.g. Cloudflare Tunnel or local server), pass your API URL and optional key via URL parameters once:
+To connect your deployed frontend to your private backend (e.g. Cloudflare Tunnel or local server), pass your API URL via URL parameters once:
 
 ```
-https://your-site.netlify.app/?api=https://your-tunnel.trycloudflare.com&key=YOUR_SECRET_KEY
+https://katdrop.oiupoyt.space/?api=https://your-tunnel.trycloudflare.com
 ```
 
-KatDrop will automatically save these to `localStorage` in your browser.
-
-### backend API key (optional)
-
-To require an API key on your backend, set `KATDROP_KEY`:
-
-```bash
-KATDROP_KEY=mysecretkey npm start
-```
-
-If not set, the backend runs without key verification.
+katdrop will automatically save this to `localStorage` in your browser.
 
 ## usage
 
