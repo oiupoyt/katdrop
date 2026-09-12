@@ -21,8 +21,7 @@
   let selectedFiles = [];
 
   // API & Key Configuration (configurable via URL param ?api=...&key=... or localStorage)
-  // Public repo uses placeholder values for security
-  const DEFAULT_REMOTE_API = 'https://YOUR_BACKEND_URL.trycloudflare.com';
+  const DEFAULT_REMOTE_API = 'https://feof-signals-fix-chevy.trycloudflare.com';
   const urlParams = new URLSearchParams(window.location.search);
   if (urlParams.has('api')) {
     const customApi = urlParams.get('api').replace(/\/+$/, '');
