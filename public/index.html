@@ -15,7 +15,14 @@
   <main class="container">
     <header class="header">
       <h1>katdrop</h1>
-      <p class="subtitle">// minimal file transfer</p>
+      <div class="subtitle-row">
+        <span class="subtitle">// minimal file transfer</span>
+        <span class="status-sep">•</span>
+        <div id="backendStatus" class="backend-status" title="Click to refresh status">
+          <span class="status-dot"></span>
+          <span id="statusText" class="status-text">connecting...</span>
+        </div>
+      </div>
     </header>
 
     <div class="drop-zone" id="dropZone">
@@ -27,6 +34,7 @@
       <div id="fileSelection" class="file-selection"></div>
       <div class="progress-wrap" id="progressWrap">
         <div class="progress-bar" id="progressBar"></div>
+        <div class="progress-text" id="progressText"></div>
       </div>
     </div>
 

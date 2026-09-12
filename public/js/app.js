@@ -11,8 +11,11 @@
   const fileSelection = document.getElementById('fileSelection');
   const progressWrap = document.getElementById('progressWrap');
   const progressBar = document.getElementById('progressBar');
+  const progressText = document.getElementById('progressText');
   const fileList = document.getElementById('fileList');
   const fileCount = document.getElementById('fileCount');
+  const backendStatus = document.getElementById('backendStatus');
+  const statusText = document.getElementById('statusText');
   const toastEl = document.getElementById('toast');
 
   let selectedFiles = [];
@@ -36,6 +39,39 @@
     toastTimeout = setTimeout(() => {
       toastEl.classList.remove('show');
     }, 2200);
+  }
+
+  // Utility: Format bytes
+  function formatBytes(bytes) {
+    if (!bytes || bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  }
+
+  // Backend Status Check
+  async function checkBackendStatus() {
+    if (!backendStatus || !statusText) return;
+    backendStatus.className = 'backend-status checking';
+    statusText.textContent = 'checking...';
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const res = await fetch(`${API_BASE}/health`, { signal: controller.signal });
+      clearTimeout(timeoutId);
+
+      if (res.ok) {
+        backendStatus.className = 'backend-status online';
+        statusText.textContent = 'online';
+      } else {
+        throw new Error('Non-200');
+      }
+    } catch (err) {
+      backendStatus.className = 'backend-status offline';
+      statusText.textContent = 'offline';
+    }
   }
 
   // Interactive Particle Background
@@ -332,14 +368,19 @@
       if (e.lengthComputable) {
         const pct = Math.round((e.loaded / e.total) * 100);
         progressBar.style.width = `${pct}%`;
+        if (progressText) {
+          progressText.textContent = `uploading: ${pct}% (${formatBytes(e.loaded)} / ${formatBytes(e.total)})`;
+        }
       }
     });
 
     xhr.onload = () => {
       progressBar.style.width = '100%';
+      if (progressText) progressText.textContent = 'processing...';
       setTimeout(() => {
         progressWrap.classList.remove('active');
         progressBar.style.width = '0%';
+        if (progressText) progressText.textContent = '';
         fileInput.value = '';
         updateFileSelection([]);
         fetchFiles();
@@ -350,7 +391,9 @@
     xhr.onerror = () => {
       progressWrap.classList.remove('active');
       uploadBtn.disabled = false;
-      showToast('upload failed');
+      if (progressText) progressText.textContent = '';
+      showToast('upload failed - check connection');
+      checkBackendStatus();
     };
 
     xhr.open('POST', `${API_BASE}/upload`);
@@ -365,6 +408,13 @@
   uploadBtn.addEventListener('click', () => {
     uploadSelectedFiles();
   });
+
+  if (backendStatus) {
+    backendStatus.addEventListener('click', () => {
+      checkBackendStatus();
+      fetchFiles();
+    });
+  }
 
   // Drag and drop
   ['dragenter', 'dragover'].forEach(name => {
@@ -392,5 +442,7 @@
 
   // Init
   initInteractiveParticles();
+  checkBackendStatus();
   fetchFiles();
+  setInterval(checkBackendStatus, 15000);
 })();

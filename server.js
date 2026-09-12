@@ -104,6 +104,11 @@ app.use((req, res, next) => {
 app.use(express.json());
 app.use(express.static(publicDir));
 
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', uptime: Math.floor(process.uptime()) });
+});
+
 // Upload endpoint (supports single or multiple files)
 app.post('/upload', upload.array('file', 20), (req, res) => {
   if (!req.files || req.files.length === 0) {

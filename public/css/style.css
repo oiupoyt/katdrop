@@ -46,11 +46,68 @@ h1 {
   margin-bottom: 4px;
 }
 
+.subtitle-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+}
+
 .subtitle {
-  font-size: 0.8rem;
   color: #555;
-  letter-spacing: 0.05em;
   text-transform: lowercase;
+}
+
+.status-sep {
+  color: #333;
+}
+
+.backend-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #666;
+  font-size: 0.72rem;
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.15s ease;
+}
+
+.backend-status:hover {
+  color: #999;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  background: #444;
+  display: inline-block;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.backend-status.online {
+  color: #4ade80;
+}
+.backend-status.online .status-dot {
+  background: #4ade80;
+  box-shadow: 0 0 6px rgba(74, 222, 128, 0.45);
+}
+
+.backend-status.offline {
+  color: #ff5555;
+}
+.backend-status.offline .status-dot {
+  background: #ff5555;
+  box-shadow: 0 0 6px rgba(255, 85, 85, 0.45);
+}
+
+.backend-status.checking {
+  color: #eab308;
+}
+.backend-status.checking .status-dot {
+  background: #eab308;
 }
 
 /* Upload Drop Zone */
@@ -147,6 +204,14 @@ h1 {
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(-3px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+.progress-text {
+  margin-top: 8px;
+  font-size: 0.72rem;
+  color: #777;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Files Section */
