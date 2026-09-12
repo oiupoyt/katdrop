@@ -17,7 +17,7 @@ a minimal, smooth file transfer service with 10-minute auto-deletion.
 
 ## configuration
 
-### connecting your frontend (Netlify) to your backend
+### connecting your frontend to your backend
 
 To connect your deployed frontend to your private backend (e.g. Cloudflare Tunnel or local server), pass your API URL and optional key via URL parameters once:
 
