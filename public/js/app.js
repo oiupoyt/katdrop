@@ -363,8 +363,8 @@
     }
   }
 
-  // 75MB Chunk Size (safely bypasses Cloudflare 100MB body limit for files 100MB-2GB+)
-  const CHUNK_SIZE = 75 * 1024 * 1024;
+  // 16MB Chunk Size (safely bypasses Cloudflare 100MB body limit & connection timeouts on Wi-Fi)
+  const CHUNK_SIZE = 16 * 1024 * 1024;
 
   async function uploadSingleFile(file, overallIndex, totalFiles) {
     const fileLabel = totalFiles > 1 ? `[${overallIndex + 1}/${totalFiles}] ` : '';
