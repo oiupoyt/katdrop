@@ -18,12 +18,14 @@
   let selectedFiles = [];
 
   // API Base configuration for remote frontend (Netlify) or local hosting
+  const DEFAULT_REMOTE_API = 'https://pope-prev-fresh-manufacturer.trycloudflare.com';
   const urlParams = new URLSearchParams(window.location.search);
   if (urlParams.has('api')) {
     const customApi = urlParams.get('api').replace(/\/+$/, '');
     localStorage.setItem('katdrop_api', customApi);
   }
-  const API_BASE = window.KATDROP_API || localStorage.getItem('katdrop_api') || '';
+  const isLocalOrigin = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname.startsWith('192.168.');
+  const API_BASE = window.KATDROP_API || localStorage.getItem('katdrop_api') || (isLocalOrigin ? '' : DEFAULT_REMOTE_API);
 
   // Toast
   let toastTimeout;
