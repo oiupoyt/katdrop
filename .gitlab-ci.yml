@@ -1,0 +1,20 @@
+stages:
+  - test
+
+default:
+  image: node:22-alpine
+  cache:
+    key:
+      files:
+        - package-lock.json
+    paths:
+      - node_modules/
+
+test:
+  stage: test
+  script:
+    - npm ci
+    - node --check server.js
+    - node --check public/js/app.js
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
