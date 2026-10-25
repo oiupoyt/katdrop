@@ -20,8 +20,9 @@
 
   let selectedFiles = [];
 
-  // API Configuration (placeholder default for self-hosting; pass ?api=https://your-api.com)
-  const DEFAULT_REMOTE_API = 'YOUR_BACKEND_API_URL';
+  // API Configuration (auto-detects official backend on *.oiupoyt.space; customizable via ?api= or KATDROP_API)
+  const isOiupoyt = window.location.hostname.endsWith('oiupoyt.space');
+  const DEFAULT_REMOTE_API = isOiupoyt ? 'https://katdrop-api.oiupoyt.space' : 'YOUR_BACKEND_API_URL';
   // Purge any legacy ephemeral trycloudflare or placeholder URLs from localStorage
   const savedApi = localStorage.getItem('katdrop_api');
   if (savedApi && (savedApi.includes('trycloudflare.com') || savedApi.includes('YOUR_BACKEND_URL') || savedApi.includes('YOUR_BACKEND_API_URL'))) {

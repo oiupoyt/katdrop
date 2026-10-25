@@ -1,0 +1,17 @@
+node_modules
+node_modules/**
+uploads
+uploads/**
+chunks
+chunks/**
+.git
+.git/**
+.wrangler
+.wrangler/**
+.gitignore
+wrangler.json
+server.js
+package.json
+package-lock.json
+README.md
+LICENSE
