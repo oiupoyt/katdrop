@@ -4,8 +4,6 @@ a minimal, smooth file transfer service with 10-minute auto-deletion.
 
 ↗ [katdrop.oiupoyt.space](https://katdrop.oiupoyt.space)
 
-> **Backend API**: The official backend is powered by a permanent Cloudflare Tunnel at `https://katdrop-api.oiupoyt.space`.
-
 ## features
 
 - minimal dark interface with smooth interactive particle background
@@ -22,12 +20,16 @@ a minimal, smooth file transfer service with 10-minute auto-deletion.
 
 ## configuration
 
-The deployed frontend at `https://katdrop.oiupoyt.space` connects out of the box to the official permanent backend at `https://katdrop-api.oiupoyt.space`. No URL parameters or configuration required.
+If self-hosting the frontend separately from the backend, configure your API endpoint by setting `DEFAULT_REMOTE_API` in `public/js/app.js`:
+```javascript
+const DEFAULT_REMOTE_API = 'https://your-api-domain.com';
+```
 
-To connect to a custom private backend, pass `?api=...`:
+Or connect dynamically in the browser by passing `?api=...`:
 ```
-https://katdrop.oiupoyt.space/?api=https://your-custom-backend.com
+https://your-katdrop-site.com/?api=https://your-api-domain.com
 ```
+(Saved to `localStorage` for future visits).
 
 ## usage
 

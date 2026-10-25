@@ -20,11 +20,11 @@
 
   let selectedFiles = [];
 
-  // API Configuration (permanent default backend)
-  const DEFAULT_REMOTE_API = 'https://katdrop-api.oiupoyt.space';
+  // API Configuration (placeholder default for self-hosting; pass ?api=https://your-api.com)
+  const DEFAULT_REMOTE_API = 'YOUR_BACKEND_API_URL';
   // Purge any legacy ephemeral trycloudflare or placeholder URLs from localStorage
   const savedApi = localStorage.getItem('katdrop_api');
-  if (savedApi && (savedApi.includes('trycloudflare.com') || savedApi.includes('YOUR_BACKEND_URL'))) {
+  if (savedApi && (savedApi.includes('trycloudflare.com') || savedApi.includes('YOUR_BACKEND_URL') || savedApi.includes('YOUR_BACKEND_API_URL'))) {
     localStorage.removeItem('katdrop_api');
   }
   const urlParams = new URLSearchParams(window.location.search);
@@ -33,7 +33,7 @@
     localStorage.setItem('katdrop_api', customApi);
   }
   const isLocalOrigin = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname.startsWith('192.168.');
-  const API_BASE = window.KATDROP_API || localStorage.getItem('katdrop_api') || (isLocalOrigin ? '' : DEFAULT_REMOTE_API);
+  const API_BASE = window.KATDROP_API || localStorage.getItem('katdrop_api') || (isLocalOrigin ? '' : (DEFAULT_REMOTE_API === 'YOUR_BACKEND_API_URL' ? '' : DEFAULT_REMOTE_API));
 
   // Fetch helper
   function apiFetch(url, options = {}) {
