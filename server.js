@@ -466,7 +466,7 @@ app.get("/api/vps-status", (req, res) => {
   let radarFreeCount = 20;
   let radarLastSync = null;
   try {
-    const raw = fs.readFileSync("/etc/model-radar/state.json", "utf8");
+    const raw = fs.readFileSync("/home/oiupoyt/services/model-radar/state.json", "utf8");
     const parsed = JSON.parse(raw);
     if (parsed.catalog) {
       radarCatalogCount = Object.keys(parsed.catalog).length;
@@ -475,10 +475,10 @@ app.get("/api/vps-status", (req, res) => {
     if (parsed.last_success) radarLastSync = parsed.last_success;
   } catch (_) {}
 
-  let diskTotalGb = "50.0";
-  let diskUsedGb = "9.2";
-  let diskFreeGb = "38.0";
-  let diskPct = 20;
+  let diskTotalGb = "241.1";
+  let diskUsedGb = "33.0";
+  let diskFreeGb = "208.1";
+  let diskPct = 14;
   try {
     const stat = fs.statfsSync("/");
     const totalBytes = stat.bsize * stat.blocks;
@@ -490,11 +490,28 @@ app.get("/api/vps-status", (req, res) => {
     diskPct = Math.round((usedBytes / totalBytes) * 100);
   } catch (_) {}
 
+  // Dynamic Host & OS detection
+  let osPretty = "Ubuntu Linux";
+  try {
+    const osRelease = fs.readFileSync("/etc/os-release", "utf8");
+    const m = osRelease.match(/PRETTY_NAME="?([^\n"]+)"?/);
+    if (m) osPretty = m[1];
+  } catch (_) {
+    osPretty = `${os.type()} ${os.release()}`;
+  }
+
+  const cpus = os.cpus() || [];
+  const cpuModel = cpus[0]?.model || "AMD EPYC";
+  const cpuCores = cpus.length || 1;
+
   res.header("Access-Control-Allow-Origin", "*");
   res.json({
     host: {
-      hostname: "katvps",
-      cpu: "3 vCPUs (x86_64)",
+      hostname: os.hostname(),
+      cpu: cpuModel,
+      cpu_cores: cpuCores,
+      arch: os.arch(),
+      os: osPretty,
       uptime_formatted: uptimeFmt,
       uptime_seconds: uptime,
       load_avg: [parseFloat(loadAvg[0].toFixed(2)), parseFloat(loadAvg[1].toFixed(2)), parseFloat(loadAvg[2].toFixed(2))],
